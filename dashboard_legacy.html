@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EEG Digital Twin — Mental Health Monitor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0D0D0D; color: #F0F0F0;
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #141414; }
+  ::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #D4A017; }
+
+  nav {
+    position: fixed; top: 0; width: 100%; z-index: 50;
+    border-bottom: 1px solid #1C1C1C;
+    background: rgba(13,13,13,0.92);
+    backdrop-filter: blur(12px);
+    height: 64px; display: flex; align-items: center;
+  }
+  .nav-inner {
+    max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+  }
+  .nav-logo { display: flex; align-items: center; gap: 10px; }
+  .nav-logo-box {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, #D4A017, #F0C040);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 12px; color: #0D0D0D; letter-spacing: -0.5px;
+  }
+  .nav-title { font-size: 18px; font-weight: 700; color: #F0F0F0; }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .live-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(212,160,23,0.06); border: 1px solid rgba(212,160,23,0.15);
+    border-radius: 20px; padding: 6px 14px;
+    font-size: 12px; color: #D4A017; font-weight: 500;
+  }
+  .live-dot { width: 7px; height: 7px; background: #D4A017; border-radius: 50%; animation: pulse 1.4s ease-in-out infinite; }
+  .live-dot.disconnected { background: #f06080; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.3;transform:scale(1.4);} }
+
+  .page { max-width: 1200px; margin: 0 auto; padding: 88px 24px 40px; }
+  .page-header { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #1C1C1C; display: flex; align-items: center; justify-content: space-between; }
+  .page-header h2 { font-size: 22px; font-weight: 700; background: linear-gradient(135deg,#D4A017 0%,#F0C040 50%,#D4A017 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .page-header p { font-size: 13px; color: #6A6A6A; margin-top: 4px; }
+
+  .api-status { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 11px 16px; border-radius: 10px; margin-bottom: 20px; font-weight: 500; transition: all 0.3s; }
+  .api-ok  { background: #0a1a0d; border: 1px solid #1a4a22; color: #4cdb8a; }
+  .api-err { background: #160a0a; border: 1px solid #4a1a1a; color: #f06080; }
+  .api-dot { font-size: 8px; }
+
+  .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  button { padding: 10px 20px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s, box-shadow 0.2s; font-family: inherit; }
+  button:hover { opacity: 0.88; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg,#D4A017,#B8860B); color: #0D0D0D; box-shadow: 0 0 20px rgba(212,160,23,0.3); }
+  .btn-primary:hover { box-shadow: 0 0 28px rgba(212,160,23,0.45); opacity:1; }
+  .btn-outline { background: transparent; border: 1px solid rgba(212,160,23,0.3); color: #D4A017; }
+  .btn-outline:hover { border-color:#D4A017; background:rgba(212,160,23,0.05); opacity:1; }
+  .btn-danger  { background: transparent; border: 1px solid rgba(240,96,128,0.3); color: #f06080; }
+  .btn-danger:hover  { border-color:#f06080; background:rgba(240,96,128,0.05); opacity:1; }
+  .btn-ghost   { background: #1C1C1C; color: #A0A0A0; border: 1px solid #2A2A2A; }
+  .btn-blue    { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.25); color: #60A5FA; }
+  .btn-blue:hover  { background:rgba(96,165,250,0.18); opacity:1; }
+  .btn-green   { background: rgba(76,219,138,0.1); border: 1px solid rgba(76,219,138,0.25); color: #4cdb8a; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap:14px; margin-bottom:18px; }
+  .stat-card { background:#141414; border:1px solid #2A2A2A; border-radius:12px; padding:20px; transition:border-color 0.2s,box-shadow 0.2s; }
+  .stat-card:hover { border-color:rgba(212,160,23,0.3); box-shadow:0 0 20px rgba(212,160,23,0.06); }
+  .stat-value { font-size:34px; font-weight:700; line-height:1; margin-bottom:6px; }
+  .stat-label { font-size:11px; color:#6A6A6A; text-transform:uppercase; letter-spacing:0.08em; }
+  .gold{color:#D4A017;} .green{color:#4cdb8a;} .red{color:#f06080;} .blue{color:#7eb8f7;}
+
+  .main-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .card { background:#141414; border:1px solid #2A2A2A; border-radius:14px; padding:22px 24px; }
+  .card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:#6A6A6A; margin-bottom:16px; }
+
+  .state-display { text-align:center; padding:16px 0; }
+  .state-circle { width:130px; height:130px; border-radius:50%; margin:0 auto 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:14px; font-weight:600; border:2px solid; transition:all 0.5s ease; }
+  .state-circle.healthy { background:rgba(76,219,138,0.06); border-color:#4cdb8a; color:#4cdb8a; }
+  .state-circle.mdd { background:rgba(240,96,128,0.07); border-color:#f06080; color:#f06080; animation:alertpulse 1.2s ease-in-out infinite; }
+  @keyframes alertpulse { 0%,100%{box-shadow:0 0 0 0 rgba(240,96,128,0.35);}50%{box-shadow:0 0 0 18px rgba(240,96,128,0);} }
+  .state-circle .state-icon { font-size:38px; margin-bottom:4px; }
+  .state-label { font-size:19px; font-weight:700; margin-bottom:4px; }
+  .state-sub   { font-size:12px; color:#6A6A6A; }
+  .prob-section { margin-top:18px; }
+  .prob-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:13px; color:#A0A0A0; }
+  .prob-row span:last-child { color:#F0F0F0; font-weight:600; }
+  .prob-bar-bg  { height:8px; background:#242424; border-radius:6px; overflow:hidden; margin-bottom:14px; }
+  .prob-bar-fill{ height:100%; border-radius:6px; transition:width 0.6s ease; }
+  .bar-green { background:linear-gradient(90deg,#1a6640,#4cdb8a); }
+  .bar-red   { background:linear-gradient(90deg,#7a1a30,#f06080); }
+
+  .gauge-wrap { text-align:center; padding:8px 0; }
+  .gauge-num  { font-size:52px; font-weight:700; line-height:1; transition:color 0.5s; }
+  .gauge-sub  { font-size:12px; color:#6A6A6A; margin-top:6px; }
+  .risk-bar-bg  { height:12px; background:#242424; border-radius:8px; overflow:hidden; margin:14px 0 6px; }
+  .risk-bar-fill{ height:100%; border-radius:8px; transition:width 0.6s ease, background 0.6s ease; }
+  .risk-legend  { display:flex; justify-content:space-between; font-size:11px; color:#4A4A4A; }
+  .latency-bars { display:flex; align-items:flex-end; gap:5px; height:72px; margin-top:10px; }
+  .lat-bar      { flex:1; border-radius:3px 3px 0 0; transition:height 0.4s ease; min-height:4px; }
+
+  .bottom-grid { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
+  .log-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .log-table th { text-align:left; padding:8px 10px; color:#6A6A6A; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; border-bottom:1px solid #2A2A2A; font-weight:600; }
+  .log-table td { padding:9px 10px; border-bottom:1px solid #1C1C1C; font-family:'SF Mono','Fira Code','Courier New',monospace; font-size:12px; color:#C0C0C0; }
+  .log-table tr:hover td { background:#181818; }
+  .log-table tr:last-child td { border-bottom:none; }
+
+  .badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:600; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+  .badge-healthy { background:rgba(76,219,138,0.1);  color:#4cdb8a; border:1px solid rgba(76,219,138,0.2); }
+  .badge-mdd     { background:rgba(240,96,128,0.1);  color:#f06080; border:1px solid rgba(240,96,128,0.2); }
+  .badge-alert   { background:rgba(212,160,23,0.1);  color:#D4A017; border:1px solid rgba(212,160,23,0.2); }
+  .badge-custom  { background:rgba(96,165,250,0.1);  color:#60A5FA; border:1px solid rgba(96,165,250,0.2); }
+
+  .info-row { display:flex; justify-content:space-between; border-bottom:1px solid #1C1C1C; padding:8px 0; font-size:13px; }
+  .info-row:last-child { border-bottom:none; }
+  .info-row .lbl { color:#6A6A6A; }
+  .info-row .val { color:#F0F0F0; font-weight:500; }
+
+  .alert-banner { display:none; background:rgba(240,96,128,0.08); border:1px solid rgba(240,96,128,0.25); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:13px; color:#f06080; font-weight:600; align-items:center; gap:10px; }
+  .alert-banner.visible { display:flex; }
+
+  /* ═══ DATA INPUT PANEL ═══ */
+  .input-panel { background:#141414; border:1px solid #2A2A2A; border-radius:14px; margin-bottom:18px; overflow:hidden; }
+  .input-panel-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; cursor:pointer; border-bottom:1px solid transparent; transition:border-color 0.2s; user-select:none; }
+  .input-panel-header:hover { background:#181818; }
+  .input-panel.open .input-panel-header { border-bottom-color:#2A2A2A; }
+  .input-panel-title { display:flex; align-items:center; gap:10px; }
+  .input-panel-title strong { font-size:14px; font-weight:700; color:#F0F0F0; }
+  .input-panel-title small  { font-size:12px; color:#5A5A5A; margin-left:6px; }
+  .input-panel-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(96,165,250,0.08); border:1px solid rgba(96,165,250,0.2); border-radius:20px; padding:4px 14px; font-size:12px; color:#60A5FA; font-weight:600; }
+  .input-panel-body { display:none; padding:22px 24px; }
+  .input-panel.open .input-panel-body { display:block; }
+
+  .mode-tabs { display:flex; gap:6px; margin-bottom:20px; }
+  .mode-tab { padding:7px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid #2A2A2A; background:#0D0D0D; color:#6A6A6A; transition:all 0.15s; }
+  .mode-tab.active { background:rgba(212,160,23,0.1); border-color:rgba(212,160,23,0.3); color:#D4A017; }
+  .mode-panel { display:none; }
+  .mode-panel.active { display:block; }
+
+  .feature-group { margin-bottom:20px; }
+  .fg-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#D4A017; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .fg-title::after { content:''; flex:1; height:1px; background:rgba(212,160,23,0.12); }
+  .fg5  { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .fg3  { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .fg2  { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+
+  .field-wrap { display:flex; flex-direction:column; gap:5px; }
+  .field-wrap label { font-size:11px; color:#5A5A5A; font-weight:500; }
+  .field-hint { font-size:10px; color:#3A3A3A; }
+  .field-wrap input, .field-wrap select { background:#0D0D0D; border:1px solid #2A2A2A; border-radius:8px; padding:9px 12px; color:#F0F0F0; font-size:13px; outline:none; font-family:inherit; width:100%; transition:border-color 0.2s; }
+  .field-wrap input:focus, .field-wrap select:focus { border-color:#D4A017; }
+  .field-wrap input.changed { border-color:rgba(96,165,250,0.5); }
+
+  .input-actions { display:flex; gap:10px; align-items:center; margin-top:18px; flex-wrap:wrap; }
+  .input-status { font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; display:none; align-items:center; gap:6px; }
+  .input-status.ok  { display:flex; background:rgba(76,219,138,0.08); color:#4cdb8a; border:1px solid rgba(76,219,138,0.2); }
+  .input-status.err { display:flex; background:rgba(240,96,128,0.08); color:#f06080; border:1px solid rgba(240,96,128,0.2); }
+  .input-status.loading { display:flex; background:rgba(212,160,23,0.08); color:#D4A017; border:1px solid rgba(212,160,23,0.2); }
+
+  .inline-result { display:none; margin-top:18px; background:#0D0D0D; border:1px solid #2A2A2A; border-radius:12px; padding:18px; }
+  .inline-result.visible { display:block; }
+  .ir-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px; }
+  .ir-cell { background:#141414; border-radius:10px; padding:14px; text-align:center; }
+  .ir-val { font-size:22px; font-weight:700; line-height:1; margin-bottom:4px; }
+  .ir-lbl { font-size:11px; color:#5A5A5A; text-transform:uppercase; letter-spacing:0.08em; }
+  .ir-prediction { font-size:30px; font-weight:800; text-align:center; margin-bottom:6px; }
+  .ir-sub { font-size:13px; color:#6A6A6A; text-align:center; }
+
+  .csv-area { width:100%; background:#0D0D0D; border:1px solid #2A2A2A; border-radius:8px; padding:12px; color:#C0C0C0; font-size:12px; font-family:'SF Mono','Courier New',monospace; resize:vertical; outline:none; min-height:80px; }
+  .csv-area:focus { border-color:#D4A017; }
+
+  /* ═══ CLINICAL REPORT PANEL ═══ */
+  .report-panel { background:#141414; border:1px solid rgba(212,160,23,0.25); border-radius:14px; margin-bottom:18px; overflow:hidden; }
+  .report-panel-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; cursor:pointer; border-bottom:1px solid transparent; transition:all 0.2s; user-select:none; background:linear-gradient(135deg,rgba(212,160,23,0.04),transparent); }
+  .report-panel-header:hover { background:rgba(212,160,23,0.06); }
+  .report-panel.open .report-panel-header { border-bottom-color:rgba(212,160,23,0.2); }
+  .report-panel-body { display:none; padding:22px 24px; }
+  .report-panel.open .report-panel-body { display:block; }
+  .report-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(212,160,23,0.1); border:1px solid rgba(212,160,23,0.3); border-radius:20px; padding:4px 14px; font-size:12px; color:#D4A017; font-weight:600; }
+
+  .rp-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .rp-grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px; }
+  .rp-full  { margin-bottom:14px; }
+  .rp-label { font-size:11px; color:#5A5A5A; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:5px; }
+  .rp-input { background:#0D0D0D; border:1px solid #2A2A2A; border-radius:8px; padding:9px 12px; color:#F0F0F0; font-size:13px; outline:none; font-family:inherit; width:100%; transition:border-color 0.2s; }
+  .rp-input:focus { border-color:#D4A017; }
+  .rp-textarea { background:#0D0D0D; border:1px solid #2A2A2A; border-radius:8px; padding:10px 12px; color:#C0C0C0; font-size:12px; font-family:inherit; width:100%; resize:vertical; outline:none; min-height:70px; transition:border-color 0.2s; }
+  .rp-textarea:focus { border-color:#D4A017; }
+  .rp-divider { border:none; border-top:1px solid #2A2A2A; margin:16px 0; }
+  .rp-source-opts { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .rp-source-btn { padding:7px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid #2A2A2A; background:#0D0D0D; color:#6A6A6A; transition:all 0.15s; }
+  .rp-source-btn.active { background:rgba(212,160,23,0.1); border-color:rgba(212,160,23,0.3); color:#D4A017; }
+  .rp-eeg-hint { background:#0D0D0D; border:1px solid #2A2A2A; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:12px; color:#7A7A7A; line-height:1.7; }
+  .rp-eeg-hint strong { color:#D4A017; }
+
+  .rp-result { display:none; margin-top:16px; border-radius:12px; overflow:hidden; border:1px solid #2A2A2A; }
+  .rp-result.visible { display:block; }
+  .rp-result-header { padding:14px 18px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .rp-result-header.mdd { background:rgba(240,96,128,0.1); color:#f06080; border-bottom:1px solid rgba(240,96,128,0.2); }
+  .rp-result-header.healthy { background:rgba(76,219,138,0.1); color:#4cdb8a; border-bottom:1px solid rgba(76,219,138,0.2); }
+  .rp-result-body { background:#0D0D0D; padding:14px 18px; }
+  .rp-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+  .rp-metric { background:#141414; border-radius:8px; padding:12px; text-align:center; border:1px solid #2A2A2A; }
+  .rp-metric-val { font-size:20px; font-weight:700; line-height:1; margin-bottom:3px; }
+  .rp-metric-lbl { font-size:10px; color:#5A5A5A; text-transform:uppercase; letter-spacing:0.08em; }
+
+  .btn-pdf { background:linear-gradient(135deg,#D4A017,#B8860B); color:#0D0D0D; font-weight:700; border:none; border-radius:8px; padding:11px 22px; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; box-shadow:0 0 20px rgba(212,160,23,0.3); transition:all 0.2s; }
+  .btn-pdf:hover:not(:disabled) { box-shadow:0 0 30px rgba(212,160,23,0.5); transform:translateY(-1px); }
+  .btn-pdf:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
+  .rp-action-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .rp-status { font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; }
+  .rp-status.loading { background:rgba(212,160,23,0.08); color:#D4A017; border:1px solid rgba(212,160,23,0.2); }
+  .rp-status.ok  { background:rgba(76,219,138,0.08); color:#4cdb8a; border:1px solid rgba(76,219,138,0.2); }
+  .rp-status.err { background:rgba(240,96,128,0.08); color:#f06080; border:1px solid rgba(240,96,128,0.2); }
+
+  .footer { text-align:center; font-size:11px; color:#3A3A3A; padding:20px 0 8px; border-top:1px solid #1C1C1C; }
+
+  @media(max-width:768px){
+    .stats-row{grid-template-columns:1fr 1fr;}
+    .main-grid{grid-template-columns:1fr;}
+    .bottom-grid{grid-template-columns:1fr;}
+    .fg5{grid-template-columns:repeat(2,1fr);}
+    .ir-grid{grid-template-columns:repeat(2,1fr);}
+    .rp-grid2,.rp-grid3{grid-template-columns:1fr;}
+    .rp-metrics{grid-template-columns:repeat(2,1fr);}
+    .nav-title{font-size:15px;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <div class="nav-logo-box">EEG</div>
+      <span class="nav-title">Digital Twin</span>
+    </div>
+    <div class="nav-right">
+      <div id="custom-badge" style="display:none;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:20px;padding:6px 14px;font-size:12px;color:#60A5FA;font-weight:600;">
+        📋 Custom Data Active
+      </div>
+      <div class="live-badge">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="live-label">Connecting…</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="page-header">
+    <div>
+      <h2>Mental Health Monitor</h2>
+      <p>Cloud-Based Real-Time MDD Detection · SRM Institute of Science and Technology</p>
+    </div>
+    <div style="font-size:12px;color:#4A4A4A;text-align:right">
+      <span style="color:#D4A017;font-weight:600">SVM · RBF Kernel</span><br>
+      18 EEG Features · Real-Time Inference
+    </div>
+  </div>
+
+  <div id="api-status-bar" class="api-status api-err">
+    <span class="api-dot">●</span>
+    <span id="api-msg">Connecting to EEG Digital Twin API…</span>
+  </div>
+
+  <div class="alert-banner" id="alert-banner">
+    ⚠ &nbsp;High MDD probability detected — pattern matches depressive episode signature
+  </div>
+
+  <div class="controls">
+    <button class="btn-primary" onclick="runSingle()">▶ Run Prediction</button>
+    <button class="btn-outline" onclick="startAuto()" id="btn-auto">⏱ Auto Monitor (2s)</button>
+    <button class="btn-danger"  onclick="stopAuto()"  id="btn-stop" style="display:none">⏹ Stop</button>
+    <button class="btn-ghost"   onclick="clearLog()">✕ Clear</button>
+    <span id="data-src-tag" style="display:none;font-size:12px;color:#60A5FA;font-weight:600;">📋 Using custom data</span>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-value gold" id="stat-total">0</div><div class="stat-label">Total Samples</div></div>
+    <div class="stat-card"><div class="stat-value red"  id="stat-mdd">0</div><div class="stat-label">MDD Detected</div></div>
+    <div class="stat-card"><div class="stat-value blue" id="stat-lat">—</div><div class="stat-label">Avg Latency (ms)</div></div>
+    <div class="stat-card"><div class="stat-value green" id="stat-acc">—</div><div class="stat-label">API Stability</div></div>
+  </div>
+
+  <!-- ══════════════ EEG DATA INPUT PANEL ══════════════ -->
+  <div class="input-panel" id="input-panel">
+    <div class="input-panel-header" onclick="togglePanel()">
+      <div class="input-panel-title">
+        <span style="font-size:18px">📋</span>
+        <strong>Patient Data Input</strong>
+        <small>Enter EEG values from your device — predict on real data</small>
+      </div>
+      <div class="input-panel-badge" id="panel-badge">▼ Expand</div>
+    </div>
+
+    <div class="input-panel-body">
+      <div class="mode-tabs">
+        <div class="mode-tab active" id="tab-manual" onclick="switchMode('manual')">✏️ Manual Entry</div>
+        <div class="mode-tab" id="tab-csv"    onclick="switchMode('csv')">📄 Paste CSV Row</div>
+      </div>
+
+      <!-- MANUAL -->
+      <div class="mode-panel active" id="mode-manual">
+        <div class="feature-group">
+          <div class="fg-title">⚡ Power Spectral Density (PSD) — Brainwave Bands</div>
+          <div class="fg5">
+            <div class="field-wrap"><label>PSD Delta <span class="field-hint">0.5–4 Hz</span></label><input type="number" step="0.01" id="f_psd_delta" placeholder="e.g. 1.20" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>PSD Theta <span class="field-hint">4–8 Hz</span></label><input type="number" step="0.01" id="f_psd_theta" placeholder="e.g. 0.90" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>PSD Alpha <span class="field-hint">8–13 Hz</span></label><input type="number" step="0.01" id="f_psd_alpha" placeholder="e.g. 1.80" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>PSD Beta <span class="field-hint">13–30 Hz</span></label><input type="number" step="0.01" id="f_psd_beta" placeholder="e.g. 1.40" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>PSD Gamma <span class="field-hint">30–50 Hz</span></label><input type="number" step="0.01" id="f_psd_gamma" placeholder="e.g. 0.50" oninput="markChanged(this)"></div>
+          </div>
+        </div>
+
+        <div class="feature-group">
+          <div class="fg-title">📊 Alpha Asymmetry</div>
+          <div class="fg3">
+            <div class="field-wrap"><label>Alpha Asymmetry <span class="field-hint">frontal L–R</span></label><input type="number" step="0.001" id="f_alpha_asymmetry" placeholder="e.g. 0.05" oninput="markChanged(this)"></div>
+          </div>
+        </div>
+
+        <div class="feature-group">
+          <div class="fg-title">🔗 Channel Coherence (0.0 – 1.0)</div>
+          <div class="fg5">
+            <div class="field-wrap"><label>Fp1 ↔ Fp2</label><input type="number" step="0.001" min="0" max="1" id="f_coh_Fp1_Fp2" placeholder="0.65" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>F3 ↔ F4</label><input type="number" step="0.001" min="0" max="1" id="f_coh_F3_F4" placeholder="0.63" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>C3 ↔ C4</label><input type="number" step="0.001" min="0" max="1" id="f_coh_C3_C4" placeholder="0.67" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>P3 ↔ P4</label><input type="number" step="0.001" min="0" max="1" id="f_coh_P3_P4" placeholder="0.64" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>O1 ↔ O2</label><input type="number" step="0.001" min="0" max="1" id="f_coh_O1_O2" placeholder="0.66" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>Fp1 → F3</label><input type="number" step="0.001" min="0" max="1" id="f_coh_Fp1_F3" placeholder="0.73" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>Fp2 → F4</label><input type="number" step="0.001" min="0" max="1" id="f_coh_Fp2_F4" placeholder="0.74" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>F3 → C3</label><input type="number" step="0.001" min="0" max="1" id="f_coh_F3_C3" placeholder="0.71" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>F4 → C4</label><input type="number" step="0.001" min="0" max="1" id="f_coh_F4_C4" placeholder="0.72" oninput="markChanged(this)"></div>
+            <div class="field-wrap"><label>C3 → P3</label><input type="number" step="0.001" min="0" max="1" id="f_coh_C3_P3" placeholder="0.70" oninput="markChanged(this)"></div>
+          </div>
+        </div>
+
+        <div class="feature-group">
+          <div class="fg-title">👤 Demographics</div>
+          <div class="fg2">
+            <div class="field-wrap"><label>Age <span class="field-hint">20–70</span></label><input type="number" step="1" min="1" max="120" id="f_age" placeholder="e.g. 30" oninput="markChanged(this)"></div>
+            <div class="field-wrap">
+              <label>Gender</label>
+              <select id="f_gender" onchange="markChanged(this)">
+                <option value="" disabled selected>— Select —</option>
+                <option value="0">Female (0)</option>
+                <option value="1">Male (1)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-actions">
+          <button class="btn-primary" onclick="predictFromForm()">▶ Predict with This Data</button>
+          <button class="btn-blue"    onclick="fillForm(SAMPLE_HEALTHY)">🎲 Sample Healthy</button>
+          <button class="btn-blue"    onclick="fillForm(SAMPLE_MDD)">🎲 Sample MDD</button>
+          <button class="btn-ghost"   onclick="clearForm()">✕ Clear</button>
+          <div class="input-status" id="form-status"></div>
+        </div>
+
+        <div class="inline-result" id="inline-result">
+          <div class="card-title">⚡ Prediction Result — Custom Data</div>
+          <div class="ir-prediction" id="ir-pred">—</div>
+          <div class="ir-sub" id="ir-sub"></div>
+          <div class="ir-grid">
+            <div class="ir-cell"><div class="ir-val gold" id="ir-mdd">—</div><div class="ir-lbl">MDD Probability</div></div>
+            <div class="ir-cell"><div class="ir-val blue" id="ir-conf">—</div><div class="ir-lbl">Confidence</div></div>
+            <div class="ir-cell"><div class="ir-val" id="ir-lat">—</div><div class="ir-lbl">Latency (ms)</div></div>
+            <div class="ir-cell"><div class="ir-val" id="ir-alert">—</div><div class="ir-lbl">Alert</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSV -->
+      <div class="mode-panel" id="mode-csv">
+        <p style="font-size:13px;color:#7A7A7A;margin-bottom:12px;line-height:1.7">
+          Paste one row of comma-separated values — exactly 18 numbers in this order:
+        </p>
+        <code style="display:block;font-size:11px;color:#5A5A5A;background:#0D0D0D;border:1px solid #1C1C1C;border-radius:8px;padding:10px 14px;margin-bottom:14px;line-height:2">
+          psd_delta, psd_theta, psd_alpha, psd_beta, psd_gamma, alpha_asymmetry,<br>
+          coh_Fp1_Fp2, coh_F3_F4, coh_C3_C4, coh_P3_P4, coh_O1_O2,<br>
+          coh_Fp1_F3, coh_Fp2_F4, coh_F3_C3, coh_F4_C4, coh_C3_P3,<br>
+          age, gender
+        </code>
+        <textarea class="csv-area" id="csv-input" placeholder="e.g. 1.2, 0.9, 1.8, 1.4, 0.5, 0.05, 0.65, 0.63, 0.67, 0.64, 0.66, 0.73, 0.74, 0.71, 0.72, 0.70, 30, 1"></textarea>
+        <p style="font-size:11px;color:#3A3A3A;margin-top:6px">18 comma-separated values. Gender: 0 = Female, 1 = Male</p>
+        <div class="input-actions">
+          <button class="btn-primary" onclick="predictFromCSV()">▶ Predict from CSV</button>
+          <button class="btn-blue"    onclick="fillCSVSample()">🎲 Sample Values</button>
+          <div class="input-status" id="csv-status"></div>
+        </div>
+        <div class="inline-result" id="csv-result">
+          <div class="card-title">⚡ Prediction Result — CSV Data</div>
+          <div class="ir-prediction" id="csv-pred">—</div>
+          <div class="ir-sub" id="csv-sub"></div>
+          <div class="ir-grid">
+            <div class="ir-cell"><div class="ir-val gold" id="csv-mdd">—</div><div class="ir-lbl">MDD Probability</div></div>
+            <div class="ir-cell"><div class="ir-val blue" id="csv-conf">—</div><div class="ir-lbl">Confidence</div></div>
+            <div class="ir-cell"><div class="ir-val" id="csv-lat">—</div><div class="ir-lbl">Latency (ms)</div></div>
+            <div class="ir-cell"><div class="ir-val" id="csv-alert">—</div><div class="ir-lbl">Alert</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- ══════════════ CLINICAL REPORT GENERATOR ══════════════ -->
+  <div class="report-panel" id="report-panel">
+    <div class="report-panel-header" onclick="toggleReportPanel()">
+      <div class="input-panel-title">
+        <span style="font-size:20px">📄</span>
+        <strong style="font-size:14px;font-weight:700;color:#D4A017;">Real-World Clinical Report Generator</strong>
+        <small style="font-size:12px;color:#5A5A5A;margin-left:6px;">Enter patient details → analyse EEG → download structured 7-section PDF report</small>
+      </div>
+      <div class="report-badge" id="rp-badge">▼ Expand</div>
+    </div>
+
+    <div class="report-panel-body">
+
+      <!-- Section A: Patient Info -->
+      <div class="fg-title">👤 Patient Information</div>
+      <div class="rp-grid3">
+        <div>
+          <div class="rp-label">Patient Name *</div>
+          <input class="rp-input" id="rp_name" type="text" placeholder="e.g. John Doe">
+        </div>
+        <div>
+          <div class="rp-label">Patient ID</div>
+          <input class="rp-input" id="rp_id" type="text" placeholder="e.g. PT-2026-001">
+        </div>
+        <div>
+          <div class="rp-label">Report Date</div>
+          <input class="rp-input" id="rp_date" type="date">
+        </div>
+      </div>
+      <div class="rp-grid2">
+        <div>
+          <div class="rp-label">Referring Doctor</div>
+          <input class="rp-input" id="rp_doctor" type="text" placeholder="e.g. Dr. Priya Sharma">
+        </div>
+        <div>
+          <div class="rp-label">Hospital / Clinic</div>
+          <input class="rp-input" id="rp_hospital" type="text" placeholder="e.g. SRM Medical Centre">
+        </div>
+      </div>
+      <div class="rp-full">
+        <div class="rp-label">Clinical Notes (symptoms, history, medications — optional)</div>
+        <textarea class="rp-textarea" id="rp_notes" placeholder="e.g. Patient reports 6-week history of persistent low mood, poor sleep, and reduced concentration. No prior psychiatric history."></textarea>
+      </div>
+
+      <hr class="rp-divider">
+
+      <!-- Section B: EEG Data Source -->
+      <div class="fg-title">⚡ EEG Data Source</div>
+      <div class="rp-source-opts">
+        <button class="rp-source-btn active" id="rpsrc-form"   onclick="rpSetSource('form')">📋 Use Manual Entry Panel</button>
+        <button class="rp-source-btn"        id="rpsrc-csv"    onclick="rpSetSource('csv')">📄 Use CSV Panel</button>
+        <button class="rp-source-btn"        id="rpsrc-manual" onclick="rpSetSource('manual')">✏️ Enter EEG Data Here</button>
+      </div>
+      <div class="rp-eeg-hint" id="rp-hint">
+        <strong>Using the Manual Entry panel above.</strong> Fill in the 18 EEG fields in the Patient Data Input section, then click <strong>Preview Result</strong> or <strong>Generate PDF</strong> below.
+      </div>
+
+      <!-- Inline EEG entry (shown only for 'manual' source) -->
+      <div id="rp-inline-eeg" style="display:none">
+        <div class="feature-group">
+          <div class="fg-title">⚡ PSD Bands</div>
+          <div class="fg5">
+            <div class="field-wrap"><label>Delta</label><input type="number" step="0.01" id="rp_psd_delta" placeholder="1.20"></div>
+            <div class="field-wrap"><label>Theta</label><input type="number" step="0.01" id="rp_psd_theta" placeholder="0.90"></div>
+            <div class="field-wrap"><label>Alpha</label><input type="number" step="0.01" id="rp_psd_alpha" placeholder="1.80"></div>
+            <div class="field-wrap"><label>Beta</label> <input type="number" step="0.01" id="rp_psd_beta"  placeholder="1.40"></div>
+            <div class="field-wrap"><label>Gamma</label><input type="number" step="0.01" id="rp_psd_gamma" placeholder="0.50"></div>
+          </div>
+        </div>
+        <div class="feature-group">
+          <div class="fg-title">📊 Asymmetry + Coherences</div>
+          <div class="fg5">
+            <div class="field-wrap"><label>Alpha Asym.</label><input type="number" step="0.001" id="rp_alpha_asymmetry" placeholder="0.05"></div>
+            <div class="field-wrap"><label>Fp1↔Fp2</label><input type="number" step="0.001" min="0" max="1" id="rp_coh_Fp1_Fp2" placeholder="0.65"></div>
+            <div class="field-wrap"><label>F3↔F4</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_F3_F4"   placeholder="0.63"></div>
+            <div class="field-wrap"><label>C3↔C4</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_C3_C4"   placeholder="0.67"></div>
+            <div class="field-wrap"><label>P3↔P4</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_P3_P4"   placeholder="0.64"></div>
+            <div class="field-wrap"><label>O1↔O2</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_O1_O2"   placeholder="0.66"></div>
+            <div class="field-wrap"><label>Fp1→F3</label> <input type="number" step="0.001" min="0" max="1" id="rp_coh_Fp1_F3"  placeholder="0.73"></div>
+            <div class="field-wrap"><label>Fp2→F4</label> <input type="number" step="0.001" min="0" max="1" id="rp_coh_Fp2_F4"  placeholder="0.74"></div>
+            <div class="field-wrap"><label>F3→C3</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_F3_C3"   placeholder="0.71"></div>
+            <div class="field-wrap"><label>F4→C4</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_F4_C4"   placeholder="0.72"></div>
+            <div class="field-wrap"><label>C3→P3</label>  <input type="number" step="0.001" min="0" max="1" id="rp_coh_C3_P3"   placeholder="0.70"></div>
+          </div>
+        </div>
+        <div class="feature-group">
+          <div class="fg-title">👤 Demographics</div>
+          <div class="fg2">
+            <div class="field-wrap"><label>Age</label><input type="number" step="1" min="1" max="120" id="rp_age" placeholder="30"></div>
+            <div class="field-wrap"><label>Gender</label>
+              <select id="rp_gender">
+                <option value="" disabled selected>— Select —</option>
+                <option value="0">Female (0)</option>
+                <option value="1">Male (1)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn-blue"  onclick="rpFillSample(0)" style="font-size:12px;padding:7px 14px;">🎲 Healthy Sample</button>
+          <button class="btn-blue"  onclick="rpFillSample(1)" style="font-size:12px;padding:7px 14px;">🎲 MDD Sample</button>
+          <button class="btn-ghost" onclick="rpClearInline()" style="font-size:12px;padding:7px 14px;">✕ Clear</button>
+        </div>
+      </div>
+
+      <hr class="rp-divider">
+
+      <!-- Section C: Actions -->
+      <div class="rp-action-row">
+        <button class="btn-outline" onclick="rpPreview()" style="font-size:13px;padding:10px 22px;">⚡ Preview Result</button>
+        <button class="btn-pdf" id="rp-dl-btn" onclick="rpDownload()" disabled>📄 Generate &amp; Download PDF Report</button>
+        <span id="rp-status" class="rp-status" style="display:none;"></span>
+      </div>
+
+      <!-- Result Preview Box -->
+      <div class="rp-result" id="rp-result-box">
+        <div class="rp-result-header" id="rp-result-hdr">Awaiting analysis…</div>
+        <div class="rp-result-body">
+          <div class="rp-metrics">
+            <div class="rp-metric"><div class="rp-metric-val gold" id="rp-r-pred">—</div><div class="rp-metric-lbl">Prediction</div></div>
+            <div class="rp-metric"><div class="rp-metric-val" id="rp-r-prob">—</div><div class="rp-metric-lbl">MDD Probability</div></div>
+            <div class="rp-metric"><div class="rp-metric-val blue" id="rp-r-conf">—</div><div class="rp-metric-lbl">Confidence</div></div>
+            <div class="rp-metric"><div class="rp-metric-val" id="rp-r-roll">—</div><div class="rp-metric-lbl">Rolling Risk</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div id="rp-r-alert" style="font-size:13px;font-weight:600;"></div>
+            <div style="font-size:12px;color:#5A5A5A;">
+              Click <strong style="color:#D4A017">Generate &amp; Download PDF Report</strong> to produce the full structured clinical report (7 sections: patient info, diagnosis, EEG feature analysis, band power summary, clinical interpretation, recommendations, notes).
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- ══════════════════════════════════════════════════════ -->
+
+  <div class="main-grid">
+    <div class="card">
+      <div class="card-title">Current Mental State</div>
+      <div class="state-display">
+        <div class="state-circle healthy" id="state-circle">
+          <div class="state-icon" id="state-icon">🧠</div>
+          <div id="state-text">Waiting…</div>
+        </div>
+        <div class="state-label" id="state-big" style="color:#6A6A6A">—</div>
+        <div class="state-sub"   id="state-time">No data yet</div>
+      </div>
+      <div class="prob-section">
+        <div class="prob-row"><span>Healthy</span><span id="pct-healthy">—</span></div>
+        <div class="prob-bar-bg"><div class="prob-bar-fill bar-green" id="bar-healthy" style="width:0%"></div></div>
+        <div class="prob-row"><span>MDD probability</span><span id="pct-mdd">—</span></div>
+        <div class="prob-bar-bg"><div class="prob-bar-fill bar-red" id="bar-mdd" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Rolling MDD Risk (last 20 samples)</div>
+      <div class="gauge-wrap">
+        <div class="gauge-num gold" id="gauge-num">0%</div>
+        <div class="gauge-sub">of recent predictions flagged as MDD</div>
+        <div class="risk-bar-bg"><div class="risk-bar-fill" id="risk-bar" style="width:0%;background:#D4A017"></div></div>
+        <div class="risk-legend"><span>0% — Normal</span><span>50% — Caution</span><span>100% — High Risk</span></div>
+      </div>
+      <div style="margin-top:24px">
+        <div class="card-title">Inference Latency</div>
+        <div class="latency-bars" id="lat-bars"></div>
+        <div style="font-size:11px;color:#4A4A4A;margin-top:6px">Last 20 inference times (ms) · target: &lt;120 ms</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-grid">
+    <div class="card">
+      <div class="card-title">Prediction Log</div>
+      <div style="overflow-x:auto">
+        <table class="log-table">
+          <thead>
+            <tr><th>#</th><th>Time</th><th>Source</th><th>Prediction</th><th>MDD Prob</th><th>Confidence</th><th>Latency</th><th>Alert</th></tr>
+          </thead>
+          <tbody id="log-body">
+            <tr><td colspan="8" style="color:#4A4A4A;text-align:center;padding:24px;font-family:inherit">
+              Enter data above or click <strong style="color:#D4A017">Run Prediction</strong> to begin
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Model Information</div>
+      <div class="info-row"><span class="lbl">Algorithm</span><span class="val">SVM — RBF Kernel</span></div>
+      <div class="info-row"><span class="lbl">Features</span><span class="val">18 EEG features</span></div>
+      <div class="info-row"><span class="lbl">Accuracy</span><span class="val green">88.4% (SVM)</span></div>
+      <div class="info-row"><span class="lbl">Target Latency</span><span class="val blue">&lt;120 ms</span></div>
+      <div class="info-row"><span class="lbl">Deployment</span><span class="val">REST API / Cloud</span></div>
+      <div class="info-row"><span class="lbl">Digital Twin</span><span class="val green">Active ✓</span></div>
+      <div class="info-row"><span class="lbl">PDF Reports</span><span class="val gold">7-Section Clinical</span></div>
+      <div style="margin-top:20px">
+        <div class="card-title">Feature Set</div>
+        <div style="font-size:12px;color:#6A6A6A;line-height:2">
+          <span style="color:#D4A017">◈</span> PSD: Delta, Theta, Alpha, Beta, Gamma<br>
+          <span style="color:#D4A017">◈</span> Coherence: 10 channel pairs<br>
+          <span style="color:#D4A017">◈</span> Alpha Asymmetry (frontal)<br>
+          <span style="color:#D4A017">◈</span> Demographics: Age, Gender
+        </div>
+      </div>
+      <div style="margin-top:20px;padding:12px 14px;background:#1C1C1C;border-radius:8px;border:1px solid #2A2A2A">
+        <div style="font-size:11px;color:#6A6A6A;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">IEEE Eq. 10 — Digital Twin</div>
+        <div style="font-size:14px;color:#D4A017;font-style:italic;text-align:center">ŷ<sub>t</sub> = f(x<sub>t</sub>)</div>
+        <div style="font-size:11px;color:#4A4A4A;text-align:center;margin-top:4px">Eq. 6: x' = (x − μ) / σ</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    IEEE Paper: "Cloud-Based EEG Digital Twin Framework for Real-Time Mental Monitoring Using Machine Learning" ·
+    SRM Institute of Science and Technology, Kattankulathur
+  </div>
+</div>
+
+<script>
+const API = (window.location.origin.startsWith('file') || window.location.hostname==='')
+            ? 'http://127.0.0.1:5000' : '';
+
+let sampleCount=0, mddCount=0, latencies=[], autoTimer=null, customData=null;
+
+const FEATURE_NAMES = [
+  'psd_delta','psd_theta','psd_alpha','psd_beta','psd_gamma',
+  'alpha_asymmetry',
+  'coh_Fp1_Fp2','coh_F3_F4','coh_C3_C4','coh_P3_P4','coh_O1_O2',
+  'coh_Fp1_F3','coh_Fp2_F4','coh_F3_C3','coh_F4_C4','coh_C3_P3',
+  'age','gender'
+];
+const SAMPLE_HEALTHY = [1.0,0.8,2.0,1.5,0.5,0.05,0.65,0.63,0.67,0.64,0.66,0.73,0.74,0.71,0.72,0.70,30,1];
+const SAMPLE_MDD     = [2.2,1.8,1.0,0.7,0.3,0.30,0.42,0.40,0.44,0.41,0.43,0.50,0.51,0.49,0.50,0.48,42,0];
+
+// ── Panel toggles ──────────────────────────────────────────────────────────────
+function togglePanel() {
+  const p=document.getElementById('input-panel'), b=document.getElementById('panel-badge');
+  p.classList.toggle('open');
+  b.textContent = p.classList.contains('open') ? '▲ Collapse' : '▼ Expand';
+}
+function switchMode(m) {
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.mode-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+m).classList.add('active');
+  document.getElementById('mode-'+m).classList.add('active');
+}
+function toggleReportPanel() {
+  const p=document.getElementById('report-panel'), b=document.getElementById('rp-badge');
+  p.classList.toggle('open');
+  b.textContent = p.classList.contains('open') ? '▲ Collapse' : '▼ Expand';
+}
+
+// ── Form helpers ───────────────────────────────────────────────────────────────
+function markChanged(el){ el.classList.add('changed'); }
+
+function fillForm(vals) {
+  FEATURE_NAMES.forEach((n,i)=>{ const el=document.getElementById('f_'+n); if(!el)return; el.value=vals[i]; el.classList.remove('changed'); });
+  setFormStatus('','');
+  document.getElementById('inline-result').classList.remove('visible');
+}
+function clearForm() {
+  FEATURE_NAMES.forEach(n=>{ const el=document.getElementById('f_'+n); if(el){ el.value=''; el.classList.remove('changed'); } });
+  customData=null; setCustomMode(false);
+  document.getElementById('inline-result').classList.remove('visible');
+  setFormStatus('','');
+}
+function buildFeatures() {
+  const f={}, miss=[];
+  FEATURE_NAMES.forEach(n=>{ const el=document.getElementById('f_'+n); const v=el?parseFloat(el.value):NaN; if(isNaN(v))miss.push(n); else f[n]=v; });
+  return {f, miss};
+}
+function setFormStatus(msg,type){ const el=document.getElementById('form-status'); el.textContent=msg; el.className='input-status '+(type||''); }
+function setCSVStatus(msg,type) { const el=document.getElementById('csv-status');  el.textContent=msg; el.className='input-status '+(type||''); }
+function setCustomMode(on) {
+  document.getElementById('custom-badge').style.display  = on?'flex':'none';
+  document.getElementById('data-src-tag').style.display  = on?'inline-block':'none';
+}
+
+// ── Predict from manual form ───────────────────────────────────────────────────
+async function predictFromForm() {
+  if(!(await checkHealth())) return setFormStatus('API offline','err');
+  const {f,miss}=buildFeatures();
+  if(miss.length) return setFormStatus('Missing: '+miss.slice(0,3).join(', ')+(miss.length>3?'…':''),'err');
+  setFormStatus('⏳ Running…','loading');
+  try {
+    const r=await fetch(API+'/twin/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed');
+    showInlineResult('inline-result','ir',d);
+    setFormStatus('✓ '+d.prediction,'ok');
+    customData=f; setCustomMode(true); feedMain(d,'custom');
+  } catch(e){ setFormStatus('Error: '+e.message,'err'); }
+}
+
+// ── Predict from CSV ───────────────────────────────────────────────────────────
+async function predictFromCSV() {
+  if(!(await checkHealth())) return setCSVStatus('API offline','err');
+  const raw=document.getElementById('csv-input').value.trim();
+  if(!raw) return setCSVStatus('Paste a CSV row first.','err');
+  const vals=raw.split(',').map(v=>parseFloat(v.trim()));
+  if(vals.length!==18||vals.some(isNaN)) return setCSVStatus('Need exactly 18 numbers. Got '+vals.filter(v=>!isNaN(v)).length,'err');
+  const f={}; FEATURE_NAMES.forEach((n,i)=>f[n]=vals[i]);
+  setCSVStatus('⏳ Running…','loading');
+  try {
+    const r=await fetch(API+'/twin/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed');
+    showInlineResult('csv-result','csv',d);
+    setCSVStatus('✓ '+d.prediction,'ok');
+    customData=f; setCustomMode(true); feedMain(d,'csv');
+  } catch(e){ setCSVStatus('Error: '+e.message,'err'); }
+}
+function fillCSVSample(){ document.getElementById('csv-input').value=SAMPLE_HEALTHY.join(', '); }
+
+// ── Inline result box ──────────────────────────────────────────────────────────
+function showInlineResult(boxId,prefix,d) {
+  const box=document.getElementById(boxId); const isMDD=d.prediction==='MDD';
+  box.classList.add('visible');
+  document.getElementById(prefix+'-pred').textContent=d.prediction;
+  document.getElementById(prefix+'-pred').style.color=isMDD?'#f06080':'#4cdb8a';
+  document.getElementById(prefix+'-sub').textContent=isMDD
+    ?'⚠ Depression pattern — prob: '+(d.mdd_probability*100).toFixed(1)+'%'
+    :'✓ No depression — confidence: '+(d.confidence*100).toFixed(1)+'%';
+  document.getElementById(prefix+'-mdd').textContent=(d.mdd_probability*100).toFixed(1)+'%';
+  document.getElementById(prefix+'-mdd').style.color=isMDD?'#f06080':'#4cdb8a';
+  document.getElementById(prefix+'-conf').textContent=(d.confidence*100).toFixed(1)+'%';
+  document.getElementById(prefix+'-lat').textContent=d.inference_ms+' ms';
+  document.getElementById(prefix+'-lat').style.color=d.inference_ms>120?'#f06080':'#4cdb8a';
+  const aEl=document.getElementById(prefix+'-alert');
+  aEl.textContent=d.alert?'⚠ YES':'✓ No';
+  aEl.style.color=d.alert?'#f06080':'#4cdb8a';
+}
+
+// ── Feed main dashboard ────────────────────────────────────────────────────────
+function feedMain(d,source) {
+  sampleCount++; if(d.prediction==='MDD') mddCount++;
+  latencies.push(d.inference_ms); if(latencies.length>20) latencies.shift();
+  updateStateCard({...d,timestamp:new Date().toISOString()});
+  updateStats(); updateLatencyBars();
+  addLogRow({...d,rolling_risk:0,timestamp:new Date().toISOString()},source);
+  document.getElementById('alert-banner').className=d.alert?'alert-banner visible':'alert-banner';
+  fetchRisk();
+}
+
+// ── Health check ───────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r=await fetch(API+'/health',{signal:AbortSignal.timeout(2500)});
+    if(r.ok){
+      const d=await r.json();
+      document.getElementById('api-status-bar').className='api-status api-ok';
+      document.getElementById('api-msg').textContent='API connected — model_ready: '+d.model_ready+' · '+d.timestamp;
+      document.getElementById('live-label').textContent='Live';
+      document.getElementById('live-dot').className='live-dot';
+      return true;
+    }
+  } catch(e){}
+  document.getElementById('api-status-bar').className='api-status api-err';
+  document.getElementById('api-msg').textContent='Cannot reach API. Start the server: python api.py';
+  document.getElementById('live-label').textContent='Offline';
+  document.getElementById('live-dot').className='live-dot disconnected';
+  return false;
+}
+
+// ── Run single prediction ──────────────────────────────────────────────────────
+async function runSingle() {
+  if(!(await checkHealth())) return;
+  try {
+    let d;
+    if(customData){
+      const r=await fetch(API+'/twin/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(customData)});
+      d=await r.json(); d.timestamp=new Date().toISOString();
+    } else {
+      const r=await fetch(API+'/twin/demo');
+      d=(await r.json()).result;
+    }
+    sampleCount++; if(d.prediction==='MDD') mddCount++;
+    latencies.push(d.inference_ms); if(latencies.length>20) latencies.shift();
+    try{ const hr=await fetch(API+'/twin/history'); d.rolling_risk=(await hr.json()).rolling_risk_pct||0; }catch(e){d.rolling_risk=0;}
+    updateStateCard(d); updateStats(); updateRisk(d.rolling_risk); updateLatencyBars();
+    addLogRow(d, customData?'custom':'demo');
+    document.getElementById('alert-banner').className=d.alert?'alert-banner visible':'alert-banner';
+  } catch(e){console.error(e);}
+}
+async function fetchRisk(){ try{ const r=await fetch(API+'/twin/history'); updateRisk((await r.json()).rolling_risk_pct||0); }catch(e){} }
+
+function updateStateCard(d) {
+  const isMDD=d.prediction==='MDD';
+  document.getElementById('state-circle').className='state-circle '+(isMDD?'mdd':'healthy');
+  document.getElementById('state-icon').textContent=isMDD?'⚠️':'✅';
+  document.getElementById('state-text').textContent=d.prediction;
+  const big=document.getElementById('state-big');
+  big.textContent=isMDD?'Depression Pattern Detected':'No Depression Detected';
+  big.style.color=isMDD?'#f06080':'#4cdb8a';
+  document.getElementById('state-time').textContent='Updated: '+(d.timestamp||'').replace('T',' ').slice(0,19);
+  const mp=Math.round((d.mdd_probability||0)*100), hp=100-mp;
+  document.getElementById('pct-healthy').textContent=hp+'%';
+  document.getElementById('pct-mdd').textContent=mp+'%';
+  document.getElementById('bar-healthy').style.width=hp+'%';
+  document.getElementById('bar-mdd').style.width=mp+'%';
+}
+function updateStats(){
+  document.getElementById('stat-total').textContent=sampleCount;
+  document.getElementById('stat-mdd').textContent=mddCount;
+  document.getElementById('stat-lat').textContent=latencies.length?(latencies.reduce((a,b)=>a+b,0)/latencies.length).toFixed(1):'—';
+  document.getElementById('stat-acc').textContent='Live';
+}
+function updateRisk(risk){
+  document.getElementById('gauge-num').textContent=risk+'%';
+  document.getElementById('risk-bar').style.width=risk+'%';
+  const col=risk>70?'#f06080':risk>40?'#f5a742':'#D4A017';
+  document.getElementById('gauge-num').style.color=col;
+  document.getElementById('risk-bar').style.background=col;
+}
+function updateLatencyBars(){
+  const c=document.getElementById('lat-bars'); const mx=Math.max(...latencies,1);
+  c.innerHTML='';
+  latencies.forEach(ms=>{
+    const h=Math.max(4,Math.round((ms/Math.max(mx,10))*68));
+    const b=document.createElement('div'); b.className='lat-bar'; b.style.height=h+'px'; b.title=ms.toFixed(2)+' ms';
+    b.style.background=ms>100?'#f06080':ms>50?'#f5a742':'#D4A017'; b.style.opacity='0.7';
+    c.appendChild(b);
+  });
+}
+function addLogRow(d,source){
+  const body=document.getElementById('log-body');
+  if(sampleCount===1) body.innerHTML='';
+  const isMDD=d.prediction==='MDD';
+  const time=(d.timestamp||new Date().toISOString()).split('T')[1].replace('Z','').slice(0,8);
+  const srcBadge=source==='custom'?'<span class="badge badge-custom">Custom</span>':source==='csv'?'<span class="badge badge-custom">CSV</span>':source==='report'?'<span class="badge badge-alert">Report</span>':'<span style="color:#4A4A4A;font-size:11px">Demo</span>';
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td>${sampleCount}</td><td>${time}</td><td>${srcBadge}</td>`
+    +`<td><span class="badge ${isMDD?'badge-mdd':'badge-healthy'}">${d.prediction}</span></td>`
+    +`<td style="color:${isMDD?'#f06080':'#4cdb8a'}">${(d.mdd_probability*100).toFixed(1)}%</td>`
+    +`<td>${(d.confidence*100).toFixed(1)}%</td>`
+    +`<td style="color:${d.inference_ms>120?'#f06080':'#4cdb8a'}">${d.inference_ms} ms</td>`
+    +`<td>${d.alert?'<span class="badge badge-alert">⚠ YES</span>':'<span style="color:#4A4A4A">No</span>'}</td>`;
+  body.prepend(tr);
+}
+
+function startAuto(){
+  if(autoTimer) return;
+  document.getElementById('btn-auto').style.display='none';
+  document.getElementById('btn-stop').style.display='inline-block';
+  runSingle(); autoTimer=setInterval(runSingle,2000);
+}
+function stopAuto(){
+  clearInterval(autoTimer); autoTimer=null;
+  document.getElementById('btn-auto').style.display='inline-block';
+  document.getElementById('btn-stop').style.display='none';
+}
+function clearLog(){
+  document.getElementById('log-body').innerHTML='<tr><td colspan="8" style="color:#4A4A4A;text-align:center;padding:24px;font-family:inherit">Log cleared</td></tr>';
+  sampleCount=0; mddCount=0; latencies=[];
+  document.getElementById('stat-total').textContent='0';
+  document.getElementById('stat-mdd').textContent='0';
+  document.getElementById('stat-lat').textContent='—';
+  document.getElementById('lat-bars').innerHTML='';
+  document.getElementById('alert-banner').className='alert-banner';
+  updateRisk(0);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CLINICAL REPORT GENERATOR LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+
+let rpSource = 'form';   // 'form' | 'csv' | 'manual'
+let rpLastResult = null; // stores last preview result for PDF generation
+
+function rpSetSource(src) {
+  rpSource = src;
+  ['form','csv','manual'].forEach(s=>{
+    document.getElementById('rpsrc-'+s).classList.toggle('active', s===src);
+  });
+  document.getElementById('rp-inline-eeg').style.display = src==='manual' ? 'block' : 'none';
+  const hints = {
+    form:   '<strong>Using the Manual Entry panel above.</strong> Fill in the 18 EEG fields in the Patient Data Input section, then click Preview or Generate PDF below.',
+    csv:    '<strong>Using the CSV panel above.</strong> Paste your CSV row into the Patient Data Input → Paste CSV Row tab, then click Preview or Generate PDF below.',
+    manual: '<strong>Enter EEG values directly below.</strong> Fill in all 18 EEG feature fields in the section below, then click Preview or Generate PDF.',
+  };
+  document.getElementById('rp-hint').innerHTML = hints[src];
+}
+
+function rpFillSample(mdd) {
+  const vals = mdd ? SAMPLE_MDD : SAMPLE_HEALTHY;
+  const RP_NAMES = ['psd_delta','psd_theta','psd_alpha','psd_beta','psd_gamma','alpha_asymmetry',
+    'coh_Fp1_Fp2','coh_F3_F4','coh_C3_C4','coh_P3_P4','coh_O1_O2',
+    'coh_Fp1_F3','coh_Fp2_F4','coh_F3_C3','coh_F4_C4','coh_C3_P3','age','gender'];
+  RP_NAMES.forEach((n,i)=>{ const el=document.getElementById('rp_'+n); if(el) el.value=vals[i]; });
+}
+function rpClearInline(){
+  const RP_NAMES=['psd_delta','psd_theta','psd_alpha','psd_beta','psd_gamma','alpha_asymmetry',
+    'coh_Fp1_Fp2','coh_F3_F4','coh_C3_C4','coh_P3_P4','coh_O1_O2',
+    'coh_Fp1_F3','coh_Fp2_F4','coh_F3_C3','coh_F4_C4','coh_C3_P3','age','gender'];
+  RP_NAMES.forEach(n=>{ const el=document.getElementById('rp_'+n); if(el) el.value=''; });
+}
+
+function rpGetFeatures() {
+  if(rpSource==='form') {
+    const {f,miss}=buildFeatures();
+    if(miss.length) throw new Error('Manual entry missing: '+miss.slice(0,3).join(', ')+(miss.length>3?'…':''));
+    return f;
+  }
+  if(rpSource==='csv') {
+    const raw=document.getElementById('csv-input').value.trim();
+    if(!raw) throw new Error('CSV input is empty — paste a row in the CSV panel above.');
+    const vals=raw.split(',').map(v=>parseFloat(v.trim()));
+    if(vals.length!==18||vals.some(isNaN)) throw new Error('Need exactly 18 comma-separated numbers in the CSV panel.');
+    const f={}; FEATURE_NAMES.forEach((n,i)=>f[n]=vals[i]); return f;
+  }
+  // manual (inline fields)
+  const RP_NAMES=['psd_delta','psd_theta','psd_alpha','psd_beta','psd_gamma','alpha_asymmetry',
+    'coh_Fp1_Fp2','coh_F3_F4','coh_C3_C4','coh_P3_P4','coh_O1_O2',
+    'coh_Fp1_F3','coh_Fp2_F4','coh_F3_C3','coh_F4_C4','coh_C3_P3','age','gender'];
+  const f={}, miss=[];
+  RP_NAMES.forEach(n=>{ const el=document.getElementById('rp_'+n); const v=el?parseFloat(el.value):NaN; if(isNaN(v))miss.push(n); else f[n]=v; });
+  if(miss.length) throw new Error('Missing EEG fields: '+miss.slice(0,3).join(', ')+(miss.length>3?'…':''));
+  return f;
+}
+
+function rpGetPatientInfo() {
+  return {
+    patient_name:   document.getElementById('rp_name').value.trim()||'Unknown Patient',
+    patient_id:     document.getElementById('rp_id').value.trim()||'—',
+    doctor_name:    document.getElementById('rp_doctor').value.trim()||'—',
+    hospital:       document.getElementById('rp_hospital').value.trim()||'—',
+    report_date:    document.getElementById('rp_date').value||new Date().toISOString().slice(0,10),
+    clinical_notes: document.getElementById('rp_notes').value.trim(),
+  };
+}
+
+function rpSetStatus(msg,type){
+  const el=document.getElementById('rp-status');
+  if(!msg){ el.style.display='none'; return; }
+  el.textContent=msg; el.className='rp-status '+type; el.style.display='inline-block';
+}
+
+function rpShowResult(d){
+  const isMDD=d.prediction==='MDD';
+  const box=document.getElementById('rp-result-box'); box.classList.add('visible');
+  const hdr=document.getElementById('rp-result-hdr');
+  hdr.className='rp-result-header '+(isMDD?'mdd':'healthy');
+  hdr.textContent=(isMDD?'⚠ MDD Pattern Detected':'✓ Healthy EEG Signature')+' — '+d.prediction+' ('+Math.round(d.mdd_probability*100)+'% MDD probability)';
+  document.getElementById('rp-r-pred').textContent=d.prediction;
+  document.getElementById('rp-r-pred').style.color=isMDD?'#f06080':'#4cdb8a';
+  document.getElementById('rp-r-prob').textContent=(d.mdd_probability*100).toFixed(1)+'%';
+  document.getElementById('rp-r-prob').style.color=isMDD?'#f06080':'#4cdb8a';
+  document.getElementById('rp-r-conf').textContent=(d.confidence*100).toFixed(1)+'%';
+  const roll=d.rolling_risk||d.rolling_risk_pct||0;
+  document.getElementById('rp-r-roll').textContent=roll+'%';
+  document.getElementById('rp-r-roll').style.color=roll>60?'#f06080':roll>30?'#f5a742':'#4cdb8a';
+  const alertEl=document.getElementById('rp-r-alert');
+  alertEl.textContent=d.alert?'⚠ Clinical Alert: Refer to Psychiatry':'✓ No Alert';
+  alertEl.style.color=d.alert?'#f06080':'#4cdb8a';
+  document.getElementById('rp-dl-btn').disabled=false;
+  rpLastResult=d;
+}
+
+async function rpPreview() {
+  if(!(await checkHealth())) return rpSetStatus('API offline — start python api.py','err');
+  let feats;
+  try { feats=rpGetFeatures(); } catch(e){ return rpSetStatus(e.message,'err'); }
+  rpSetStatus('⏳ Running inference…','loading');
+  try {
+    const body={eeg_features:feats};
+    const r=await fetch(API+'/report/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Inference failed');
+    rpShowResult(d);
+    rpSetStatus('✓ Preview ready — click Generate PDF to download','ok');
+    feedMain(d,'report');
+  } catch(e){ rpSetStatus('Error: '+e.message,'err'); }
+}
+
+async function rpDownload() {
+  if(!(await checkHealth())) return rpSetStatus('API offline','err');
+  let feats;
+  try { feats=rpGetFeatures(); } catch(e){ return rpSetStatus(e.message,'err'); }
+  const info=rpGetPatientInfo();
+  if(!info.patient_name||info.patient_name==='Unknown Patient'){
+    const name=prompt('Enter patient name for the report:','Patient Name');
+    if(name) info.patient_name=name.trim();
+  }
+  rpSetStatus('⏳ Generating PDF report…','loading');
+  document.getElementById('rp-dl-btn').disabled=true;
+  try {
+    const body={patient_info:info, eeg_features:feats};
+    const r=await fetch(API+'/report/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){
+      const errData=await r.json().catch(()=>({}));
+      throw new Error(errData.error||errData.fix||'PDF generation failed (status '+r.status+')');
+    }
+    const blob=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const fname=cd.match(/filename=([^;]+)/)?.[1]||('EEG_Report_'+info.patient_name.replace(/\s+/g,'_')+'.pdf');
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=fname; a.click();
+    URL.revokeObjectURL(url);
+    rpSetStatus('✓ PDF downloaded: '+fname,'ok');
+    // Show result if not already shown
+    const pred=r.headers.get('X-Prediction');
+    const prob=parseFloat(r.headers.get('X-MDD-Probability')||'0');
+    if(pred && !rpLastResult){
+      rpShowResult({prediction:pred,mdd_probability:prob,confidence:Math.max(prob,1-prob),rolling_risk:0,alert:prob>0.70});
+    }
+  } catch(e){
+    rpSetStatus('Error: '+e.message,'err');
+  } finally {
+    document.getElementById('rp-dl-btn').disabled=false;
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+// Pre-fill report date with today
+document.getElementById('rp_date').value = new Date().toISOString().slice(0,10);
+
+checkHealth();
+setInterval(checkHealth, 10000);
+</script>
+</body>
+</html>

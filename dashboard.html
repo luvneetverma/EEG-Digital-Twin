@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neuro-Twin · MDD Clinical Dashboard</title>
+<style>
+  :root {
+    --bg:        #0b1020;
+    --bg-2:      #111832;
+    --panel:     #151c38;
+    --panel-2:   #1a2247;
+    --border:    #28325e;
+    --text:      #e8ecf7;
+    --text-dim:  #9aa4cc;
+    --accent:    #f5c05b;
+    --accent-2:  #ffd787;
+    --ok:        #5ad27a;
+    --warn:      #f2a23b;
+    --danger:    #ef5d6a;
+    --info:      #6aa8ff;
+    --shadow:    0 10px 30px rgba(0,0,0,0.35);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(160deg, var(--bg) 0%, var(--bg-2) 100%);
+    color: var(--text); min-height: 100vh;
+  }
+  header.top {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: rgba(11,16,32,0.85);
+    border-bottom: 1px solid var(--border); backdrop-filter: blur(8px);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent) 0%, #e38a2b 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #20150a;
+  }
+  .brand h1 { margin: 0; font-size: 18px; letter-spacing: 0.3px; }
+  .brand small { color: var(--text-dim); font-size: 12px; }
+  .health-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(90,210,122,0.15); color: var(--ok);
+    border: 1px solid rgba(90,210,122,0.35); font-size: 13px;
+  }
+  .health-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .health-pill.warn { background: rgba(242,162,59,0.15); color: var(--warn); border-color: rgba(242,162,59,0.35); }
+  .health-pill.warn .dot { background: var(--warn); }
+  .health-pill.err  { background: rgba(239,93,106,0.15); color: var(--danger); border-color: rgba(239,93,106,0.35); }
+  .health-pill.err .dot { background: var(--danger); }
+
+  main.wrap { max-width: 1100px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  /* Stepper */
+  .stepper {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 26px; gap: 8px;
+  }
+  .step {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 8px; position: relative; cursor: pointer;
+    padding: 6px 4px; border-radius: 10px;
+  }
+  .step .circle {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel); border: 1.5px solid var(--border);
+    color: var(--text-dim); font-weight: 700; transition: all 0.2s;
+  }
+  .step .label { font-size: 12px; color: var(--text-dim); text-align: center; }
+  .step.active .circle { background: var(--accent); border-color: var(--accent); color: #20150a; }
+  .step.active .label  { color: var(--text); font-weight: 600; }
+  .step.done   .circle { background: rgba(90,210,122,0.2); border-color: var(--ok); color: var(--ok); }
+  .step.done   .label  { color: var(--ok); }
+  .step-line {
+    position: absolute; top: 18px; left: 50%; right: -50%;
+    height: 2px; background: var(--border); z-index: -1;
+  }
+  .step:last-child .step-line { display: none; }
+
+  /* Panels */
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; box-shadow: var(--shadow);
+    display: none; animation: fadeIn 0.25s ease;
+  }
+  .panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .panel h2 { margin: 0 0 6px; font-size: 22px; }
+  .panel .subtitle { color: var(--text-dim); margin: 0 0 22px; font-size: 14px; }
+
+  /* Field grid */
+  .field-grid { display: grid; gap: 14px 18px; }
+  .field-grid.cols-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .field-grid.cols-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .field-grid.cols-5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
+  @media (max-width: 720px) {
+    .field-grid.cols-2, .field-grid.cols-3, .field-grid.cols-5 { grid-template-columns: 1fr; }
+  }
+  .field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.3px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 14px; font-family: inherit; transition: border 0.15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 20px; border-radius: 10px; border: 1px solid transparent;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; font-family: inherit;
+  }
+  .btn.primary  { background: var(--accent); color: #20150a; }
+  .btn.primary:hover { background: var(--accent-2); }
+  .btn.ghost    { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.danger   { background: rgba(239,93,106,0.15); color: var(--danger); border-color: rgba(239,93,106,0.4); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .nav-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border);
+  }
+  .nav-row .spacer { flex: 1; }
+
+  /* Audio recorder */
+  .recorder-box {
+    background: var(--panel-2); border: 1px dashed var(--border);
+    border-radius: 12px; padding: 22px; text-align: center;
+    margin-bottom: 16px;
+  }
+  .recorder-box .mic {
+    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 12px;
+    background: linear-gradient(135deg, var(--accent), #e38a2b);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: #20150a; cursor: pointer;
+    transition: all 0.2s; border: none;
+  }
+  .recorder-box .mic:hover { transform: scale(1.05); }
+  .recorder-box .mic.recording {
+    background: linear-gradient(135deg, var(--danger), #b3303c);
+    color: #fff; animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,93,106,0.5); }
+    50%      { box-shadow: 0 0 0 14px rgba(239,93,106,0); }
+  }
+  .recorder-box .status { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+  .timer { font-family: 'Consolas', monospace; font-size: 24px; color: var(--accent); letter-spacing: 1px; }
+  .upload-alt {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px; background: var(--panel-2); border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .upload-alt input[type=file] { flex: 1; color: var(--text-dim); }
+  audio { width: 100%; margin-top: 12px; filter: invert(0.85) hue-rotate(180deg); }
+
+  /* Verdict block */
+  .verdict {
+    background: linear-gradient(135deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px; margin-bottom: 20px;
+  }
+  .verdict-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .verdict-head h3 { margin: 0; font-size: 18px; }
+  .risk-badge {
+    padding: 6px 14px; border-radius: 999px; font-weight: 700;
+    font-size: 13px; letter-spacing: 0.5px;
+  }
+  .risk-Low      { background: rgba(90,210,122,0.2); color: var(--ok); border: 1px solid var(--ok); }
+  .risk-Moderate { background: rgba(242,162,59,0.2); color: var(--warn); border: 1px solid var(--warn); }
+  .risk-High     { background: rgba(239,93,106,0.2); color: var(--danger); border: 1px solid var(--danger); }
+  .risk-Critical { background: rgba(239,93,106,0.35); color: #fff; border: 1px solid var(--danger); }
+
+  .meter {
+    height: 14px; background: var(--bg-2); border-radius: 999px;
+    overflow: hidden; margin: 12px 0 6px; border: 1px solid var(--border);
+  }
+  .meter-fill {
+    height: 100%; transition: width 0.6s ease;
+    background: linear-gradient(90deg, var(--ok) 0%, var(--warn) 50%, var(--danger) 100%);
+  }
+  .meter-labels {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text-dim);
+  }
+
+  .breakdown {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;
+  }
+  @media (max-width: 720px) { .breakdown { grid-template-columns: 1fr; } }
+  .mod-card {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .mod-card .mod-title {
+    font-size: 12px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .mod-card .mod-prob { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .mod-card .mod-sub  { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  .alert-banner {
+    padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+    font-size: 14px; display: none;
+  }
+  .alert-banner.show { display: block; }
+  .alert-info    { background: rgba(106,168,255,0.15); color: var(--info); border: 1px solid var(--info); }
+  .alert-warn    { background: rgba(242,162,59,0.15); color: var(--warn); border: 1px solid var(--warn); }
+  .alert-danger  { background: rgba(239,93,106,0.15); color: var(--danger); border: 1px solid var(--danger); }
+
+  .tips {
+    background: rgba(245,192,91,0.08); border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 6px; margin-top: 14px;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .tips strong { color: var(--accent); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .chip {
+    padding: 4px 10px; border-radius: 999px; font-size: 12px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text-dim);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  footer { text-align: center; color: var(--text-dim); font-size: 12px; margin-top: 30px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo">N</div>
+    <div>
+      <h1>Neuro-Twin · Multimodal MDD Screening</h1>
+      <small>EEG + Acoustic Digital Twin · Cloud-based</small>
+    </div>
+  </div>
+  <div>
+    <span id="health-pill" class="health-pill"><span class="dot"></span><span id="health-text">Checking…</span></span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- Stepper -->
+  <div class="stepper" id="stepper">
+    <div class="step active" data-step="1"><div class="circle">1</div><div class="label">Demographics</div><div class="step-line"></div></div>
+    <div class="step"        data-step="2"><div class="circle">2</div><div class="label">Clinical history</div><div class="step-line"></div></div>
+    <div class="step"        data-step="3"><div class="circle">3</div><div class="label">EEG capture</div><div class="step-line"></div></div>
+    <div class="step"        data-step="4"><div class="circle">4</div><div class="label">Voice sample</div><div class="step-line"></div></div>
+    <div class="step"        data-step="5"><div class="circle">5</div><div class="label">Assessment</div></div>
+  </div>
+
+  <!-- ── Step 1: Demographics ──────────────────────────────────────────── -->
+  <section class="panel active" data-panel="1">
+    <h2>Patient demographics</h2>
+    <p class="subtitle">Basic identifiers. Used only for this session's report.</p>
+
+    <div class="field-grid cols-3">
+      <div class="field"><label>Full name</label><input id="p_name" placeholder="e.g. Priya Sharma"></div>
+      <div class="field"><label>Patient ID / MRN</label><input id="p_id" placeholder="Auto" value=""></div>
+      <div class="field"><label>Date of visit</label><input id="p_date" type="date"></div>
+      <div class="field"><label>Age</label><input id="p_age" type="number" min="12" max="100" value="28"></div>
+      <div class="field"><label>Sex</label>
+        <select id="p_sex"><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select>
+      </div>
+      <div class="field"><label>Handedness</label>
+        <select id="p_hand"><option>Right</option><option>Left</option><option>Ambidextrous</option></select>
+      </div>
+      <div class="field"><label>Contact (phone / email)</label><input id="p_contact" placeholder="Optional"></div>
+      <div class="field"><label>Referring clinician</label><input id="p_clin" placeholder="Optional"></div>
+      <div class="field"><label>Primary language</label><input id="p_lang" value="English"></div>
+    </div>
+
+    <div class="tips"><strong>Privacy:</strong> data stays in this session and is not uploaded beyond your local API instance.</div>
+
+    <div class="nav-row">
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="gotoStep(2)">Continue →</button>
+    </div>
+  </section>
+
+  <!-- ── Step 2: Clinical history / Screening ──────────────────────────── -->
+  <section class="panel" data-panel="2">
+    <h2>Clinical history &amp; screening</h2>
+    <p class="subtitle">Self-reported indicators. Helps contextualise the model's verdict.</p>
+
+    <div class="field-grid cols-2">
+      <div class="field"><label>PHQ-9 score (0–27)</label><input id="c_phq9" type="number" min="0" max="27" value="0"></div>
+      <div class="field"><label>Known MDD diagnosis?</label>
+        <select id="c_dx"><option>No</option><option>Yes</option><option>Unsure</option></select>
+      </div>
+      <div class="field"><label>Currently on medication?</label>
+        <select id="c_med"><option>No</option><option>Yes — SSRI</option><option>Yes — SNRI</option><option>Yes — Other</option></select>
+      </div>
+      <div class="field"><label>Prior psychiatric hospitalisation?</label>
+        <select id="c_hosp"><option>No</option><option>Yes (&lt; 1 yr)</option><option>Yes (&gt; 1 yr ago)</option></select>
+      </div>
+      <div class="field"><label>Family history of depression</label>
+        <select id="c_fam"><option>No</option><option>Yes — first-degree</option><option>Yes — extended</option><option>Unknown</option></select>
+      </div>
+      <div class="field"><label>Sleep (hrs / night, past week)</label><input id="c_sleep" type="number" step="0.5" min="0" max="16" value="7"></div>
+      <div class="field"><label>Recent weight change (kg, +/-)</label><input id="c_weight" type="number" step="0.1" value="0"></div>
+      <div class="field"><label>Stress level (1-10)</label><input id="c_stress" type="number" min="1" max="10" value="5"></div>
+    </div>
+
+    <div class="field" style="margin-top:14px">
+      <label>Presenting complaints / notes</label>
+      <textarea id="c_notes" rows="3" placeholder="Free-text observations from intake interview…"></textarea>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn ghost" onclick="gotoStep(1)">← Back</button>
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="gotoStep(3)">Continue →</button>
+    </div>
+  </section>
+
+  <!-- ── Step 3: EEG capture ───────────────────────────────────────────── -->
+  <section class="panel" data-panel="3">
+    <h2>EEG feature capture</h2>
+    <p class="subtitle">10 band-power &amp; asymmetry features aggregated from the scalp recording.</p>
+
+    <div class="chips">
+      <span class="chip" onclick="loadEEGDemo('healthy')">Load healthy exemplar</span>
+      <span class="chip" onclick="loadEEGDemo('mdd')">Load MDD exemplar</span>
+      <span class="chip" onclick="randomiseEEG()">Randomise (testing)</span>
+    </div>
+
+    <div class="field-grid cols-5" id="eeg-grid" style="margin-top:18px"></div>
+
+    <div class="tips">
+      Values are the z-scored outputs of typical QEEG preprocessing (bandpass → ICA → log band-power). Normal human ranges are roughly −3 to +3 per band.
+    </div>
+
+    <div class="nav-row">
+      <button class="btn ghost" onclick="gotoStep(2)">← Back</button>
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="gotoStep(4)">Continue →</button>
+    </div>
+  </section>
+
+  <!-- ── Step 4: Audio capture ─────────────────────────────────────────── -->
+  <section class="panel" data-panel="4">
+    <h2>Voice sample</h2>
+    <p class="subtitle">Ask the patient to read a short passage or describe their day (≥ 15 s recommended). You may also upload a previously recorded file.</p>
+
+    <div id="audio-alert" class="alert-banner alert-info show">
+      Both live recording and file upload work. We extract 36 acoustic biomarkers (MFCCs, pitch, jitter, shimmer, HNR, etc.) on the server.
+    </div>
+
+    <div class="recorder-box">
+      <button id="mic-btn" class="mic" onclick="toggleRecording()" title="Start / stop recording">
+        &#127908;
+      </button>
+      <div class="timer" id="rec-timer">00:00</div>
+      <div class="status" id="rec-status">Click the mic to start recording</div>
+      <audio id="rec-playback" controls style="display:none"></audio>
+    </div>
+
+    <div class="upload-alt">
+      <div style="font-size:13px;color:var(--text-dim);min-width:110px">or upload file</div>
+      <input id="audio-file" type="file" accept="audio/*">
+      <button class="btn ghost" onclick="useUploadedFile()">Use file</button>
+    </div>
+
+    <div class="chips" style="margin-top:14px">
+      <span class="chip" onclick="useDemoAudio()">Skip — use synthetic demo sample</span>
+    </div>
+
+    <div class="tips">
+      <strong>Prompt script (Sentence "Grandfather passage"):</strong> "You wished to know all about my grandfather. Well, he is nearly ninety-three years old; he dresses himself in an ancient black frock coat…"
+    </div>
+
+    <div class="nav-row">
+      <button class="btn ghost" onclick="gotoStep(3)">← Back</button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-run" onclick="runFusion()">Run assessment →</button>
+    </div>
+  </section>
+
+  <!-- ── Step 5: Report / Assessment ───────────────────────────────────── -->
+  <section class="panel" data-panel="5">
+    <h2>Multimodal assessment</h2>
+    <p class="subtitle">Late-fusion verdict combining EEG (60%) and voice (40%).</p>
+
+    <div id="alert-zone"></div>
+    <div id="verdict-zone">
+      <div class="verdict">
+        <div class="verdict-head">
+          <h3>Running analysis…</h3>
+          <span class="risk-badge risk-Low">—</span>
+        </div>
+        <div class="subtitle">Please wait.</div>
+      </div>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn ghost" onclick="gotoStep(4)">← Back</button>
+      <span class="spacer"></span>
+      <button class="btn ghost"   onclick="resetAll()">New patient</button>
+      <button class="btn primary" id="btn-pdf" onclick="downloadPDF()" disabled>Download full PDF report</button>
+    </div>
+  </section>
+
+  <footer>
+    Neuro-Twin · Cloud-based Digital Twin (IEEE 2024) · Prototype — not a medical device.
+  </footer>
+</main>
+
+<script>
+// ─── Schema ────────────────────────────────────────────────────────────────
+// 18 features expected by the EEG Digital Twin (see /docs).
+const EEG_FIELDS = [
+  "psd_delta", "psd_theta", "psd_alpha", "psd_beta", "psd_gamma",
+  "alpha_asymmetry",
+  "coh_Fp1_Fp2", "coh_F3_F4", "coh_C3_C4", "coh_P3_P4", "coh_O1_O2",
+  "coh_Fp1_F3", "coh_Fp2_F4", "coh_F3_C3", "coh_F4_C4", "coh_C3_P3",
+  "age", "gender"
+];
+// Clinically-plausible healthy exemplar (z-score style)
+const EEG_DEMO_HEALTHY = [
+  1.17, 0.76, 2.26, 2.03, 0.45,    // PSDs
+  0.015,                            // alpha asymmetry
+  0.84, 0.74, 0.59, 0.72, 0.59,     // short-range coherence
+  0.67, 0.76, 0.50, 0.52, 0.66,     // long-range coherence
+  32, 0                             // age, gender
+];
+// MDD exemplar: elevated theta/delta, suppressed alpha, reduced coherence,
+// negative frontal asymmetry — canonical depressive QEEG pattern.
+const EEG_DEMO_MDD = [
+  1.80, 1.35, 1.10, 1.25, 0.42,
+ -0.22,
+  0.52, 0.48, 0.45, 0.47, 0.44,
+  0.43, 0.46, 0.41, 0.39, 0.42,
+  32, 0
+];
+
+const API_BASE = window.location.origin.includes(':') ? window.location.origin : 'http://localhost:5000';
+let currentStep = 1;
+let lastReport  = null;
+
+// ─── Navigation ────────────────────────────────────────────────────────────
+function gotoStep(n) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.panel[data-panel="${n}"]`).classList.add('active');
+  document.querySelectorAll('.step').forEach(s => {
+    const sn = parseInt(s.dataset.step);
+    s.classList.toggle('active', sn === n);
+    s.classList.toggle('done',   sn  < n);
+  });
+  currentStep = n;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+document.querySelectorAll('.step').forEach(s => {
+  s.addEventListener('click', () => {
+    const sn = parseInt(s.dataset.step);
+    if (sn <= currentStep) gotoStep(sn);
+  });
+});
+
+// ─── Health pill ───────────────────────────────────────────────────────────
+async function refreshHealth() {
+  const pill = document.getElementById('health-pill');
+  const text = document.getElementById('health-text');
+  try {
+    const r = await fetch(`${API_BASE}/health`);
+    const j = await r.json();
+    const eeg   = j.eeg_ready   || j.twin_ready || false;
+    const audio = j.audio_ready || false;
+    if (eeg && audio) {
+      pill.className = 'health-pill'; text.textContent = 'EEG + Audio online';
+    } else if (eeg || audio) {
+      pill.className = 'health-pill warn'; text.textContent = eeg ? 'EEG only' : 'Audio only';
+    } else {
+      pill.className = 'health-pill err'; text.textContent = 'Models loading…';
+    }
+  } catch (e) {
+    pill.className = 'health-pill err'; text.textContent = 'API offline';
+  }
+}
+refreshHealth();
+
+// ─── Build EEG grid ────────────────────────────────────────────────────────
+function buildEEGGrid() {
+  const g = document.getElementById('eeg-grid');
+  g.innerHTML = '';
+  EEG_FIELDS.forEach((name, i) => {
+    const d = document.createElement('div'); d.className = 'field';
+    d.innerHTML = `<label>${name.replace(/_/g, ' ')}</label>
+                   <input id="eeg_${name}" type="number" step="0.001" value="${EEG_DEMO_HEALTHY[i]}">`;
+    g.appendChild(d);
+  });
+}
+buildEEGGrid();
+
+function loadEEGDemo(kind) {
+  const vals = kind === 'mdd' ? EEG_DEMO_MDD : EEG_DEMO_HEALTHY;
+  EEG_FIELDS.forEach((n, i) => document.getElementById(`eeg_${n}`).value = vals[i]);
+}
+function randomiseEEG() {
+  EEG_FIELDS.forEach(n => {
+    document.getElementById(`eeg_${n}`).value = (Math.random() * 4 - 2).toFixed(3);
+  });
+}
+
+// ─── Audio recording ───────────────────────────────────────────────────────
+let mediaRecorder = null, audioChunks = [], recStart = 0, timerId = null;
+let recordedBlob  = null, uploadedFile = null, demoRequested = false;
+
+async function toggleRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecording();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(recordedBlob);
+      const pb  = document.getElementById('rec-playback');
+      pb.src = url; pb.style.display = 'block';
+      document.getElementById('rec-status').textContent = `Recorded ${(recordedBlob.size/1024).toFixed(1)} KB — ready`;
+      stream.getTracks().forEach(t => t.stop());
+      uploadedFile = null; demoRequested = false;
+    };
+    mediaRecorder.start();
+    recStart = Date.now();
+    document.getElementById('mic-btn').classList.add('recording');
+    document.getElementById('rec-status').textContent = 'Recording… click again to stop';
+    timerId = setInterval(() => {
+      const s = Math.floor((Date.now() - recStart) / 1000);
+      document.getElementById('rec-timer').textContent =
+        `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    }, 500);
+  } catch (e) {
+    alertBanner('warn', `Microphone unavailable: ${e.message}. Please upload a file instead.`);
+  }
+}
+function stopRecording() {
+  if (mediaRecorder) mediaRecorder.stop();
+  clearInterval(timerId);
+  document.getElementById('mic-btn').classList.remove('recording');
+}
+function useUploadedFile() {
+  const f = document.getElementById('audio-file').files[0];
+  if (!f) { alertBanner('warn', 'Please choose a file first.'); return; }
+  uploadedFile = f; recordedBlob = null; demoRequested = false;
+  document.getElementById('rec-status').textContent = `Uploaded: ${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+  alertBanner('info', `File "${f.name}" ready for analysis.`);
+}
+function useDemoAudio() {
+  demoRequested = true; recordedBlob = null; uploadedFile = null;
+  document.getElementById('rec-status').textContent = 'Using synthetic demo sample for this session.';
+  alertBanner('info', 'Demo acoustic features will be used (no real voice sample).');
+}
+
+// ─── Alert helper ──────────────────────────────────────────────────────────
+function alertBanner(kind, msg) {
+  const el = document.getElementById('audio-alert');
+  el.className = `alert-banner alert-${kind} show`;
+  el.textContent = msg;
+}
+function reportAlert(kind, msg) {
+  const z = document.getElementById('alert-zone');
+  z.innerHTML = `<div class="alert-banner alert-${kind} show">${msg}</div>`;
+}
+
+// ─── Build payload and run fusion ──────────────────────────────────────────
+function gatherPayload() {
+  const eeg = {};
+  EEG_FIELDS.forEach(n => eeg[n] = parseFloat(document.getElementById(`eeg_${n}`).value || 0));
+
+  const patient_info = {
+    name:   document.getElementById('p_name').value,
+    id:     document.getElementById('p_id').value,
+    date:   document.getElementById('p_date').value,
+    age:    parseInt(document.getElementById('p_age').value || 0),
+    sex:    document.getElementById('p_sex').value,
+    handedness: document.getElementById('p_hand').value,
+    contact: document.getElementById('p_contact').value,
+    clinician: document.getElementById('p_clin').value,
+    language:  document.getElementById('p_lang').value,
+  };
+  const clinical_history = {
+    phq9:    parseInt(document.getElementById('c_phq9').value || 0),
+    dx:      document.getElementById('c_dx').value,
+    medication: document.getElementById('c_med').value,
+    prior_hosp: document.getElementById('c_hosp').value,
+    family_history: document.getElementById('c_fam').value,
+    sleep_hours_per_night: parseFloat(document.getElementById('c_sleep').value || 0),
+    weight_change_kg: parseFloat(document.getElementById('c_weight').value || 0),
+    stress_level: parseInt(document.getElementById('c_stress').value || 0),
+    notes: document.getElementById('c_notes').value,
+  };
+  return { patient_info, clinical_history, eeg_features: eeg };
+}
+
+async function runFusion() {
+  gotoStep(5);
+  document.getElementById('btn-pdf').disabled = true;
+  document.getElementById('alert-zone').innerHTML = '';
+  document.getElementById('verdict-zone').innerHTML =
+    `<div class="verdict"><div class="verdict-head"><h3>Running EEG + audio analysis…</h3><span class="risk-badge risk-Low">⏳</span></div><div class="subtitle">This typically takes 2–4 seconds.</div></div>`;
+
+  const base = gatherPayload();
+  try {
+    let resp;
+    if (recordedBlob || uploadedFile) {
+      // Multipart: send audio file + JSON payload
+      const fd = new FormData();
+      fd.append('audio_file', recordedBlob || uploadedFile, (recordedBlob ? 'recording.webm' : uploadedFile.name));
+      fd.append('payload', JSON.stringify(base));
+      resp = await fetch(`${API_BASE}/report/full`, { method: 'POST', body: fd });
+    } else {
+      // JSON: tells server to use demo acoustic features
+      resp = await fetch(`${API_BASE}/report/full`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...base, use_demo_audio: true }),
+      });
+    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    const j = await resp.json();
+    lastReport = j;
+    renderVerdict(j);
+    document.getElementById('btn-pdf').disabled = !j.report_pdf_base64;
+  } catch (e) {
+    reportAlert('danger', `Assessment failed: ${e.message}. Check that the API is running on ${API_BASE}.`);
+    document.getElementById('verdict-zone').innerHTML = '';
+  }
+}
+
+function renderVerdict(j) {
+  const f = j.fused || j;
+  const band = f.risk_band || 'Low';
+  const sev  = f.severity_score ?? 0;
+  const prob = f.mdd_probability ?? 0;
+  const pred = f.prediction || '—';
+
+  let msg = '';
+  if (band === 'Low')       msg = `Low-risk profile. MDD probability ${(prob*100).toFixed(1)}%. Continue routine monitoring.`;
+  else if (band === 'Moderate') msg = `Moderate risk. MDD probability ${(prob*100).toFixed(1)}%. Consider PHQ-9 follow-up in 2 weeks.`;
+  else if (band === 'High') msg = `Elevated risk. MDD probability ${(prob*100).toFixed(1)}%. Clinical review recommended.`;
+  else                      msg = `Critical risk band. MDD probability ${(prob*100).toFixed(1)}%. Immediate clinical evaluation strongly advised.`;
+
+  if (f.alert) {
+    reportAlert('danger', `⚠ Alert threshold reached — ${msg}`);
+  } else if (band === 'Moderate') {
+    reportAlert('warn', msg);
+  } else {
+    reportAlert('info', msg);
+  }
+
+  const eegC = f.components?.eeg   || {};
+  const audC = f.components?.audio || {};
+
+  document.getElementById('verdict-zone').innerHTML = `
+    <div class="verdict">
+      <div class="verdict-head">
+        <h3>Verdict: <span style="color:var(--accent)">${pred}</span></h3>
+        <span class="risk-badge risk-${band}">${band} risk</span>
+      </div>
+      <div class="subtitle">Severity score — ${sev.toFixed ? sev.toFixed(1) : sev} / 100</div>
+      <div class="meter"><div class="meter-fill" style="width:${Math.min(100, sev)}%"></div></div>
+      <div class="meter-labels"><span>0 · Low</span><span>30 · Moderate</span><span>60 · High</span><span>80 · Critical</span><span>100</span></div>
+
+      <div class="breakdown">
+        <div class="mod-card">
+          <div class="mod-title">EEG twin · weight ${(f.weights?.eeg ?? 0.6).toFixed(2)}</div>
+          <div class="mod-prob">${eegC.probability != null ? (eegC.probability*100).toFixed(1) + '%' : '—'}</div>
+          <div class="mod-sub">${eegC.label || '—'}</div>
+        </div>
+        <div class="mod-card">
+          <div class="mod-title">Audio twin · weight ${(f.weights?.audio ?? 0.4).toFixed(2)}</div>
+          <div class="mod-prob">${audC.probability != null ? (audC.probability*100).toFixed(1) + '%' : '—'}</div>
+          <div class="mod-sub">${audC.label || '—'}</div>
+        </div>
+      </div>
+
+      <div class="tips" style="margin-top:16px">
+        <strong>How to read this:</strong> The fused probability is a weighted average of two independent digital twins. Weights auto-adjust if one modality is missing. This is a <em>screening aid</em>, not a diagnosis.
+      </div>
+    </div>`;
+}
+
+function downloadPDF() {
+  if (!lastReport?.report_pdf_base64) return;
+  const byteStr = atob(lastReport.report_pdf_base64);
+  const ab = new ArrayBuffer(byteStr.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+  const blob = new Blob([ab], { type: 'application/pdf' });
+  const a    = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `neurotwin_report_${Date.now()}.pdf`;
+  a.click();
+}
+
+function resetAll() {
+  if (!confirm('Clear all data and start a new patient session?')) return;
+  document.querySelectorAll('input, textarea').forEach(el => {
+    if (el.type === 'file') el.value = '';
+    else if (el.tagName === 'TEXTAREA') el.value = '';
+    else if (el.type === 'number') el.value = '';
+    else if (el.type !== 'date') el.value = '';
+  });
+  document.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+  loadEEGDemo('healthy');
+  recordedBlob = null; uploadedFile = null; demoRequested = false;
+  lastReport = null;
+  document.getElementById('rec-status').textContent = 'Click the mic to start recording';
+  document.getElementById('rec-timer').textContent  = '00:00';
+  document.getElementById('rec-playback').style.display = 'none';
+  gotoStep(1);
+}
+
+// Default date → today
+document.getElementById('p_date').valueAsDate = new Date();
+document.getElementById('p_id').value = 'P-' + Date.now().toString().slice(-6);
+</script>
+
+</body>
+</html>
